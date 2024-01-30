@@ -1,0 +1,153 @@
+﻿@page "/"
+@rendermode InteractiveServer
+
+@using MySql.Data;
+@using MySql.Data.MySqlClient;
+@using System.Data;
+@using System.Linq;
+@using Blazored.SessionStorage;
+@using Data;
+
+@inject Database DBConnect
+@inject NavigationManager navigation
+@inject Blazored.SessionStorage.ISessionStorageService sessionStorage
+
+<div class="container-fluid">
+
+
+	@foreach (DataRow catRow in Categories.Rows)
+	{
+		<div class="d-flex flex-row">
+			<table class="table-sm table-bordered m-2">
+				<thead>
+					<tr bgcolor="#eeeeee">
+						<th width="*" colspan="@(4+UsersParticipating.Rows.Count)" scope="col"><h3>@catRow["Name"]</h3></th>
+					</tr>
+					<tr bgcolor="#eeeeee">
+						<th width="300">Title</th>
+						<th width="*">Nominee</th>
+						<th width="*">Available</th>
+						<th width="30">Together</th>
+						@foreach (DataRow u in UsersParticipating.Rows)
+						{
+							<th width="30" class="text-center">@u["ShortName"]</th>
+						}
+					</tr>
+				</thead>
+				<tbody>
+
+					@foreach (DataRow row in MoviesPerCategory[(int)catRow["ID"]].Rows)
+					{
+						int movieId = (int)row["ID"];
+						bool together = (row["WatchTogether"] as sbyte?) == 1;
+						<tr style="background:@(row["Winner"] as sbyte? == 1 ? "#FE6" : null)">
+							<td>@row["Title"]</td>
+							<td>@row["Nominee"]</td>
+							<td bgcolor="@((string.IsNullOrWhiteSpace(row["URL"] as string) || (row["URL"] as string)?.ToLower()=="no") ? "#F00" : "#0F0")">@row["URL"]</td>
+							<td align="center"><input type="checkbox" @onchange="eventArgs => { togetherChanged(movieId, (bool)eventArgs.Value); }" checked="@together" /></td>
+							@foreach (DataRow u in UsersParticipating.Rows)
+							{
+								bool seen = false;
+								if ((u["ID"] as int?).HasValue)
+								{
+									int uid = (u["ID"] as int?).Value;
+									foreach (DataRow u2 in UsersSeenPerMovie[movieId].Rows)
+										if (u2["ID"] as int? == u["ID"] as int?)
+											seen = true;
+									<td align="center"><input type="checkbox" checked="@(seen)" @onchange="eventArgs => { seenChanged(movieId, uid, (bool)eventArgs.Value); }" /></td>
+								}
+							}
+						</tr>
+					}
+
+				</tbody>
+			</table>
+		</div>
+	}
+</div>
+
+@code {
+
+	DataTable Nominations = new DataTable();
+	DataTable UsersParticipating = new DataTable();
+	DataTable Categories = new DataTable();
+	Dictionary<int, DataTable> MoviesPerCategory = new Dictionary<int, DataTable>();
+	Dictionary<int, DataTable> UsersSeenPerMovie = new Dictionary<int, DataTable>();
+	int currentCeremonyId = -1;
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (currentCeremonyId == -1)
+		{
+			if (await sessionStorage.ContainKeyAsync("CurrentCeremonyId"))
+				currentCeremonyId = await sessionStorage.GetItemAsync<int>("CurrentCeremonyId");
+			else
+			{
+				var Ceremonies = await DBConnect.GetCeremonies();
+				currentCeremonyId = (int)Ceremonies.Rows[0]["ID"];
+				await sessionStorage.SetItemAsync<int>("CurrentCeremonyId", currentCeremonyId);
+			}
+			StateHasChanged();
+		}
+	}
+
+	protected override async Task OnInitializedAsync()
+	{
+		if (currentCeremonyId == -1)
+		{
+			var Ceremonies = await DBConnect.GetCeremonies();
+			currentCeremonyId = (int)Ceremonies.Rows[0]["ID"];
+		}
+		Nominations = await DBConnect.GetNominations(currentCeremonyId);
+
+		//Get the users participating the selected year:
+		UsersParticipating = await DBConnect.GetUsersParticipating(currentCeremonyId);
+		//Get the categories for the selected year:
+		Categories = await DBConnect.GetCategories(currentCeremonyId);
+		//For each currentCategoryId:
+		foreach (DataRow cat in Categories.Rows)
+		{
+			MoviesPerCategory.Add((int)cat["ID"], await DBConnect.GetNominations(currentCeremonyId, (int)cat["ID"]));
+			//For each movie:
+			foreach (DataRow movie in MoviesPerCategory[(int)cat["ID"]].Rows)
+			{
+				DataTable users = await DBConnect.GetUsersSeen((int)movie["ID"]);
+				if (!UsersSeenPerMovie.ContainsKey((int)movie["ID"]))
+					UsersSeenPerMovie.Add((int)movie["ID"], users);
+			}
+		}
+	}
+
+	protected string IDToString(int id)
+	{
+		return id + Oscars.ordinalSuffix(id) + " Academy Awards";
+	}
+
+	public async Task togetherChanged(int movieId, bool together)
+	{
+		// get the checkbox state
+		DBConnect.SetTogether(movieId, together);
+
+		foreach (DataRow cat in Categories.Rows)
+		{
+			MoviesPerCategory[(int)cat["ID"]] = await DBConnect.GetNominations(currentCeremonyId, (int)cat["ID"]);
+			//For each movie:
+			foreach (DataRow movie in MoviesPerCategory[(int)cat["ID"]].Rows)
+			{
+				DataTable users = await DBConnect.GetUsersSeen((int)movie["ID"]);
+				if (!UsersSeenPerMovie.ContainsKey((int)movie["ID"]))
+					UsersSeenPerMovie.Add((int)movie["ID"], users);
+			}
+		}
+
+		navigation.Refresh();
+	}
+
+	public async Task seenChanged(int movieId, int userId, bool seen)
+	{
+		// get the checkbox state
+		DBConnect.SetMovieSeenByUser(movieId, userId, seen);
+		DataTable users = await DBConnect.GetUsersSeen(movieId);
+		UsersSeenPerMovie[movieId] = users;
+		navigation.Refresh();
+	}
+}

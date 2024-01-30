@@ -1,0 +1,68 @@
+﻿@page "/ceremonies"
+@rendermode InteractiveServer
+<!--¤(new InteractiveServerRenderMode(false))-->
+
+@using MySql.Data;
+@using MySql.Data.MySqlClient;
+@using System.Data;
+@using Data;
+
+@inject Database DBConnect
+@inject NavigationManager navigation
+@inject Blazored.SessionStorage.ISessionStorageService sessionStorage
+
+<PageTitle>Ceremonies</PageTitle>
+
+<div class="container-fluid">
+
+	<div class="d-flex flex-row">
+
+		<table class="table table-striped table-light">
+			<thead>
+				<tr>
+					<th scope="col">Ceremony</th>
+					<th scope="col">Host</th>
+					<th scope="col">Date</th>
+				</tr>
+			</thead>
+			<tbody>
+
+				@foreach (DataRow row in CeremoniesTable.Rows)
+				{
+					int iid = (int)row["ID"];
+					string id = IDToString(iid);
+					string? host = row["Host"].ToString();
+					string? date = row["Date"].ToString();
+
+					<tr>
+						<th scope="row"><a href="" @onclick="() => SetCurrentCeremony(iid)" @onclick:preventDefault>@id</a></th>
+						<td>@row["host"]</td>
+						<td>@date</td>
+					</tr>
+				}
+
+			</tbody>
+		</table>
+	</div>
+
+</div>
+
+@code {
+
+	DataTable CeremoniesTable = new DataTable();
+	protected override async Task OnInitializedAsync()
+	{
+		CeremoniesTable = await DBConnect.GetCeremonies();
+	}
+
+	protected string IDToString(int id)
+	{
+		return id + Oscars.ordinalSuffix(id) + " Academy Awards";
+	}
+
+	protected void SetCurrentCeremony(int id)
+	{
+		sessionStorage.SetItemAsync<int>("CurrentCeremonyId", id);
+		StateHasChanged();
+	}
+}

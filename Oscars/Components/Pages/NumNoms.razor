@@ -1,0 +1,76 @@
+﻿@page "/numnoms"
+@rendermode InteractiveServer
+
+@using MySql.Data;
+@using MySql.Data.MySqlClient;
+@using System.Data;
+@using System.Linq;
+
+@using Data;
+
+@inject Database DBConnect
+
+@inject Blazored.SessionStorage.ISessionStorageService sessionStorage
+<PageTitle>Num nominations</PageTitle>
+
+<div class="container-fluid">
+
+	<div class="d-flex flex-row">
+
+			<table class="table-sm table-bordered m-2">
+				<thead>
+<!--					<tr bgcolor="#eeeeee">
+						<th width="300" colspan="3 scope="col"><h3>Most nominated movies of the @currentCeremonyId@Oscars.ordinalSuffix(currentCeremonyId) Oscars</h3></th>
+					</tr>
+		-->			<tr bgcolor="#eeeeee">
+					<th width="30">Together</th>
+					<th width="300">Title</th>
+					<th width="300" colspan="2">Nominations</th>
+					</tr>
+				</thead>
+				<tbody>
+
+					@foreach (DataRow row in MovieNoms.Rows)
+					{
+					bool together = (row["WatchTogether"] as sbyte?) == 1;
+					int movieId = (int)row["MovieId"];
+					<tr>
+						<td><input type="checkbox" checked="@together" @onchange="eventArgs => { DBConnect.SetTogether(movieId, (bool)eventArgs.Value); }" /></td>
+						<td>@row["Title"]</td>
+						<td>@row["NumNominations"]</td>
+							<td>@row["Nominations"]</td>
+						</tr>
+					}
+
+				</tbody>
+			</table>
+	</div>
+</div>
+
+@code {
+
+	DataTable MovieNoms = new DataTable();
+	DataTable Ceremonies = new DataTable();
+	int currentCeremonyId = -1;
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (await sessionStorage.ContainKeyAsync("CurrentCeremonyId"))
+			currentCeremonyId = await sessionStorage.GetItemAsync<int>("CurrentCeremonyId");
+		if (currentCeremonyId == -1)
+		{
+			var Ceremonies = await DBConnect.GetCeremonies();
+			currentCeremonyId = (int)Ceremonies.Rows[0]["ID"];
+			await sessionStorage.SetItemAsync<int>("CurrentCeremonyId", currentCeremonyId);
+			StateHasChanged();
+		}
+	}
+	protected override async Task OnInitializedAsync()
+	{
+		if (currentCeremonyId == -1)
+		{
+			var Ceremonies = await DBConnect.GetCeremonies();
+			currentCeremonyId = (int)Ceremonies.Rows[0]["ID"];
+		}
+		MovieNoms = await DBConnect.GetNumberOfNominations(currentCeremonyId);
+	}
+}
