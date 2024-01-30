@@ -25,8 +25,13 @@
 		-->			<tr bgcolor="#eeeeee">
 					<th width="30">Together</th>
 					<th width="300">Title</th>
-					<th width="300" colspan="2">Nominations</th>
-					</tr>
+					<th width="*" colspan="2">Nominations</th>
+					@foreach (DataRow u in UsersParticipating.Rows)
+					{
+						<th width="30" class="text-center">@u["ShortName"]</th>
+					}
+					<th width="*">Available</th>
+				</tr>
 				</thead>
 				<tbody>
 
@@ -38,8 +43,21 @@
 						<td><input type="checkbox" checked="@together" @onchange="eventArgs => { DBConnect.SetTogether(movieId, (bool)eventArgs.Value); }" /></td>
 						<td>@row["Title"]</td>
 						<td>@row["NumNominations"]</td>
-							<td>@row["Nominations"]</td>
-						</tr>
+						<td>@row["Nominations"]</td>
+						@foreach (DataRow u in UsersParticipating.Rows)
+						{
+							bool seen = false;
+							if ((u["ID"] as int?).HasValue)
+							{
+								int uid = (u["ID"] as int?).Value;
+								foreach (DataRow u2 in UsersSeenPerMovie[movieId].Rows)
+									if (u2["ID"] as int? == u["ID"] as int?)
+										seen = true;
+								<td align="center"><input type="checkbox" checked="@(seen)" @onchange="eventArgs => { seenChanged(movieId, uid, (bool)eventArgs.Value); }" /></td>
+							}
+						}
+						<td bgcolor="@((string.IsNullOrWhiteSpace(row["URL"] as string) || (row["URL"] as string)?.ToLower()=="no") ? "#F00" : "#0F0")">@row["URL"]</td>
+					</tr>
 					}
 
 				</tbody>
@@ -50,6 +68,8 @@
 @code {
 
 	DataTable MovieNoms = new DataTable();
+	DataTable UsersParticipating = new DataTable();
+	Dictionary<int, DataTable> UsersSeenPerMovie = new Dictionary<int, DataTable>();
 	DataTable Ceremonies = new DataTable();
 	int currentCeremonyId = -1;
 	protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -71,6 +91,21 @@
 			var Ceremonies = await DBConnect.GetCeremonies();
 			currentCeremonyId = (int)Ceremonies.Rows[0]["ID"];
 		}
+		//Get the users participating the selected year:
+		UsersParticipating = await DBConnect.GetUsersParticipating(currentCeremonyId);
+		//Get nominations
 		MovieNoms = await DBConnect.GetNumberOfNominations(currentCeremonyId);
+		foreach (DataRow movie in MovieNoms.Rows)
+		{
+			DataTable users = await DBConnect.GetUsersSeen((int)movie["MovieId"]);
+			if (!UsersSeenPerMovie.ContainsKey((int)movie["MovieId"]))
+				UsersSeenPerMovie.Add((int)movie["MovieId"], users);
+		}
+	}
+
+	public async Task seenChanged(int movieId, int userId, bool seen)
+	{
+		// get the checkbox state
+		DBConnect.SetMovieSeenByUser(movieId, userId, seen);
 	}
 }

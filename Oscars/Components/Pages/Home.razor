@@ -14,6 +14,7 @@
 
 <div class="container-fluid">
 
+	<div class="d-flex flex-row"/>
 
 	@foreach (DataRow catRow in Categories.Rows)
 	{
@@ -24,14 +25,14 @@
 						<th width="*" colspan="@(4+UsersParticipating.Rows.Count)" scope="col"><h3>@catRow["Name"]</h3></th>
 					</tr>
 					<tr bgcolor="#eeeeee">
+						<th width="30">Together</th>
 						<th width="300">Title</th>
 						<th width="*">Nominee</th>
-						<th width="*">Available</th>
-						<th width="30">Together</th>
 						@foreach (DataRow u in UsersParticipating.Rows)
 						{
 							<th width="30" class="text-center">@u["ShortName"]</th>
 						}
+						<th width="*">Available</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -41,10 +42,9 @@
 						int movieId = (int)row["ID"];
 						bool together = (row["WatchTogether"] as sbyte?) == 1;
 						<tr style="background:@(row["Winner"] as sbyte? == 1 ? "#FE6" : null)">
+							<td align="center"><input type="checkbox" @onchange="eventArgs => { togetherChanged(movieId, (bool)eventArgs.Value); }" checked="@together" /></td>
 							<td>@row["Title"]</td>
 							<td>@row["Nominee"]</td>
-							<td bgcolor="@((string.IsNullOrWhiteSpace(row["URL"] as string) || (row["URL"] as string)?.ToLower()=="no") ? "#F00" : "#0F0")">@row["URL"]</td>
-							<td align="center"><input type="checkbox" @onchange="eventArgs => { togetherChanged(movieId, (bool)eventArgs.Value); }" checked="@together" /></td>
 							@foreach (DataRow u in UsersParticipating.Rows)
 							{
 								bool seen = false;
@@ -57,6 +57,7 @@
 									<td align="center"><input type="checkbox" checked="@(seen)" @onchange="eventArgs => { seenChanged(movieId, uid, (bool)eventArgs.Value); }" /></td>
 								}
 							}
+							<td bgcolor="@((string.IsNullOrWhiteSpace(row["URL"] as string) || (row["URL"] as string)?.ToLower()=="no") ? "#F00" : "#0F0")">@row["URL"]</td>
 						</tr>
 					}
 
