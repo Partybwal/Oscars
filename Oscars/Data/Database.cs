@@ -13,7 +13,8 @@ namespace Oscars.Data
 		public Database()
 		{
 			//MySQLConnectionString = "Server=127.0.0.1; Database=employees; Uid=usrEmployees; Pwd=password;";
-			MySQLConnectionString = "Server=dynamicentertainment.se; Database=Oscars; Uid=OscarsServer; Pwd=Snygg1ng!;";
+			//MySQLConnectionString = "Server=dynamicentertainment.se; Database=Oscars; Uid=OscarsServer; Pwd=Snygg1ng!;";
+			MySQLConnectionString = "Server=192.168.1.101; Database=Oscars; Uid=OscarsServer; Pwd=Snygg1ng!;";
 		}
 
 		public async Task<DataTable> GetCeremonies()
@@ -89,7 +90,7 @@ namespace Oscars.Data
 				conn.Open();
 				// The MySqlCommand class represents a SQL statement to execute against a MySQL database
 				// Read rows - Limit for testing purpose to 15 records
-				MySqlCommand selectCommand = new MySqlCommand($"SELECT Categories.ID, Categories.Name FROM Nominations INNER JOIN Ceremonies ON Ceremonies.ID=CeremonyID AND CeremonyID={ceremonyId} INNER JOIN Categories ON CategoryID=Categories.ID GROUP BY CategoryID", conn);
+				MySqlCommand selectCommand = new MySqlCommand($"SELECT Categories.ID, Categories.Name FROM Nominations INNER JOIN Ceremonies ON Ceremonies.ID=CeremonyID AND CeremonyID={ceremonyId} INNER JOIN Categories ON CategoryID=Categories.ID GROUP BY CategoryID ORDER BY SortIndex", conn);
 				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.
 				using (var rdr = await selectCommand.ExecuteReaderAsync())
 				{
@@ -110,7 +111,7 @@ namespace Oscars.Data
 				conn.Open();
 				// The MySqlCommand class represents a SQL statement to execute against a MySQL database
 				// Read rows - Limit for testing purpose to 15 records
-				MySqlCommand selectCommand = new MySqlCommand($"SELECT Movies.*, Nominations.Nominee, Nominations.Winner FROM Nominations INNER JOIN Ceremonies ON CeremonyID=Ceremonies.ID AND Ceremonies.ID={ceremonyId} INNER JOIN Movies ON MovieID = Movies.ID WHERE CategoryID = {categoryId};", conn);
+				MySqlCommand selectCommand = new MySqlCommand($"SELECT Movies.*, Nominations.Nominee, Nominations.Winner, Nominations.ID as NomId FROM Nominations INNER JOIN Ceremonies ON CeremonyID=Ceremonies.ID AND Ceremonies.ID={ceremonyId} INNER JOIN Movies ON MovieID = Movies.ID WHERE CategoryID = {categoryId};", conn);
 				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.
 				using (var rdr = await selectCommand.ExecuteReaderAsync())
 				{
@@ -132,6 +133,48 @@ namespace Oscars.Data
 				// The MySqlCommand class represents a SQL statement to execute against a MySQL database
 				// Read rows - Limit for testing purpose to 15 records
 				MySqlCommand selectCommand = new MySqlCommand($"SELECT ID,Name FROM Users INNER JOIN MovieSeen ON UserID=Users.ID AND MovieID={movieId}", conn);
+				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.
+				using (var rdr = await selectCommand.ExecuteReaderAsync())
+				{
+					dt.Load(rdr);
+				}
+				conn.Close();
+			}
+			return dt;
+		}
+
+		public async Task<DataTable> GetUsersWant(int nomId)
+		{
+			DataTable dt = new DataTable();
+
+			using (MySqlConnection conn = new MySqlConnection(MySQLConnectionString))
+			{
+				// Connect to the database
+				conn.Open();
+				// The MySqlCommand class represents a SQL statement to execute against a MySQL database
+				// Read rows - Limit for testing purpose to 15 records
+				MySqlCommand selectCommand = new MySqlCommand($"SELECT ID,Name FROM Users INNER JOIN UserWantsToWin ON UserID=Users.ID AND NominationID={nomId}", conn);
+				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.
+				using (var rdr = await selectCommand.ExecuteReaderAsync())
+				{
+					dt.Load(rdr);
+				}
+				conn.Close();
+			}
+			return dt;
+		}
+
+		public async Task<DataTable> GetUsersThink(int nomId)
+		{
+			DataTable dt = new DataTable();
+
+			using (MySqlConnection conn = new MySqlConnection(MySQLConnectionString))
+			{
+				// Connect to the database
+				conn.Open();
+				// The MySqlCommand class represents a SQL statement to execute against a MySQL database
+				// Read rows - Limit for testing purpose to 15 records
+				MySqlCommand selectCommand = new MySqlCommand($"SELECT ID,Name FROM Users INNER JOIN UserThinksWillWin ON UserID=Users.ID AND NominationID={nomId}", conn);
 				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.
 				using (var rdr = await selectCommand.ExecuteReaderAsync())
 				{
@@ -190,6 +233,63 @@ namespace Oscars.Data
 					sql = $"INSERT INTO MovieSeen (MovieID, UserID) VALUES ({movieId}, {userId})";
 				else
 					sql = $"DELETE FROM MovieSeen WHERE MovieID={movieId} AND UserID={userId}";
+
+				MySqlCommand updateCommand = new MySqlCommand(sql, conn);
+				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.
+				await updateCommand.ExecuteNonQueryAsync();
+				conn.Close();
+			}
+		}
+
+		public async Task SetUserWants(int nomId, int userId, bool wants)
+		{
+			using (MySqlConnection conn = new MySqlConnection(MySQLConnectionString))
+			{
+				// Connect to the database
+				conn.Open();
+				// The MySqlCommand class represents a SQL statement to execute against a MySQL database
+				string sql;
+				if (wants)
+					sql = $"INSERT INTO UserWantsToWin (NominationID, UserID) VALUES ({nomId}, {userId})";
+				else
+					sql = $"DELETE FROM UserWantsToWin WHERE NominationID={nomId} AND UserID={userId}";
+
+				MySqlCommand updateCommand = new MySqlCommand(sql, conn);
+				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.
+				await updateCommand.ExecuteNonQueryAsync();
+				conn.Close();
+			}
+		}
+
+		public async Task SetUserThinks(int nomId, int userId, bool thinks)
+		{
+			using (MySqlConnection conn = new MySqlConnection(MySQLConnectionString))
+			{
+				// Connect to the database
+				conn.Open();
+				// The MySqlCommand class represents a SQL statement to execute against a MySQL database
+				string sql;
+				if (thinks)
+					sql = $"INSERT INTO UserThinksWillWin (NominationID, UserID) VALUES ({nomId}, {userId})";
+				else
+					sql = $"DELETE FROM UserThinksWillWin WHERE NominationID={nomId} AND UserID={userId}";
+
+				MySqlCommand updateCommand = new MySqlCommand(sql, conn);
+				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.
+				await updateCommand.ExecuteNonQueryAsync();
+				conn.Close();
+			}
+		}
+
+		public async Task SetAvailable(int movieId, string text)
+		{
+			using (MySqlConnection conn = new MySqlConnection(MySQLConnectionString))
+			{
+				// Connect to the database
+				conn.Open();
+				// The MySqlCommand class represents a SQL statement to execute against a MySQL database
+				string sql;
+				sql = $"UPDATE Movies SET URL='{text}' WHERE ID={movieId}";
 
 				MySqlCommand updateCommand = new MySqlCommand(sql, conn);
 				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.

@@ -13,22 +13,41 @@
 @inject Blazored.SessionStorage.ISessionStorageService sessionStorage
 <PageTitle>Num nominations</PageTitle>
 
+<table class="table-sm table-bordered m-2">
+	<thead>
+		<tr bgcolor="#333">
+		@foreach (DataRow u in UsersParticipating.Rows)
+		{
+			<th width="40" class="text-center">@u["ShortName"]</th>
+		}
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			@foreach (DataRow u in UsersParticipating.Rows)
+			{
+				if ((u["ID"] as int?).HasValue)
+				{
+					int uid = (u["ID"] as int?).Value;
+					<td align="center"><input type="checkbox" checked="@(usersWatching[uid])" @onchange="eventArgs => { watchingChanged(uid, (bool)eventArgs.Value); }" /></td>
+				}
+			}
+		</tr>
+	</tbody>
+</table>
 <div class="container-fluid">
 
 	<div class="d-flex flex-row">
 
 			<table class="table-sm table-bordered m-2">
 				<thead>
-<!--					<tr bgcolor="#eeeeee">
-						<th width="300" colspan="3 scope="col"><h3>Most nominated movies of the @currentCeremonyId@Oscars.ordinalSuffix(currentCeremonyId) Oscars</h3></th>
-					</tr>
-		-->			<tr bgcolor="#eeeeee">
+					<tr bgcolor="#333">
 					<th width="30">Together</th>
-					<th width="300">Title</th>
+					<th width="*">Title</th>
 					<th width="*" colspan="2">Nominations</th>
 					@foreach (DataRow u in UsersParticipating.Rows)
 					{
-						<th width="30" class="text-center">@u["ShortName"]</th>
+						<th width="40" class="text-center">@u["ShortName"]</th>
 					}
 					<th width="*">Available</th>
 				</tr>
@@ -38,7 +57,17 @@
 					@foreach (DataRow row in MovieNoms.Rows)
 					{
 					bool together = (row["WatchTogether"] as sbyte?) == 1;
+					string availColor = ((string.IsNullOrWhiteSpace(row["URL"] as string) || (row["URL"] as string)?.ToLower() == "no") ? "#F00" : "#0F0");
 					int movieId = (int)row["MovieId"];
+					bool skip = false;
+					foreach (int user in UsersSeenPerMovie[movieId])
+						if (usersWatching[user])
+						{
+							skip = true;
+							break;
+						}
+					if (skip)
+						continue;
 					<tr>
 						<td><input type="checkbox" checked="@together" @onchange="eventArgs => { DBConnect.SetTogether(movieId, (bool)eventArgs.Value); }" /></td>
 						<td>@row["Title"]</td>
@@ -50,13 +79,11 @@
 							if ((u["ID"] as int?).HasValue)
 							{
 								int uid = (u["ID"] as int?).Value;
-								foreach (DataRow u2 in UsersSeenPerMovie[movieId].Rows)
-									if (u2["ID"] as int? == u["ID"] as int?)
-										seen = true;
+								seen = UsersSeenPerMovie[movieId].Contains(uid);
 								<td align="center"><input type="checkbox" checked="@(seen)" @onchange="eventArgs => { seenChanged(movieId, uid, (bool)eventArgs.Value); }" /></td>
 							}
 						}
-						<td bgcolor="@((string.IsNullOrWhiteSpace(row["URL"] as string) || (row["URL"] as string)?.ToLower()=="no") ? "#F00" : "#0F0")">@row["URL"]</td>
+						<td bgcolor="@availColor"><input style="border:0;background-color:@availColor" type="text" @onchange="eventargs => availableChanged(movieId, eventargs.Value as string)" value="@row["URL"]" /></td>
 					</tr>
 					}
 
@@ -69,21 +96,51 @@
 
 	DataTable MovieNoms = new DataTable();
 	DataTable UsersParticipating = new DataTable();
-	Dictionary<int, DataTable> UsersSeenPerMovie = new Dictionary<int, DataTable>();
+	Dictionary<int, List<int>> UsersSeenPerMovie = new Dictionary<int, List<int>>();
 	DataTable Ceremonies = new DataTable();
+	Dictionary<int, bool> usersWatching = new Dictionary<int, bool>();
+	bool DataLoaded;
 	int currentCeremonyId = -1;
 	protected override async Task OnAfterRenderAsync(bool firstRender)
 	{
+		bool stateChanged = false;
 		if (await sessionStorage.ContainKeyAsync("CurrentCeremonyId"))
+		{
+			int prevCeremonyId = currentCeremonyId;
 			currentCeremonyId = await sessionStorage.GetItemAsync<int>("CurrentCeremonyId");
+			if (currentCeremonyId != prevCeremonyId)
+				stateChanged = true;
+		}
 		if (currentCeremonyId == -1)
 		{
 			var Ceremonies = await DBConnect.GetCeremonies();
 			currentCeremonyId = (int)Ceremonies.Rows[0]["ID"];
 			await sessionStorage.SetItemAsync<int>("CurrentCeremonyId", currentCeremonyId);
-			StateHasChanged();
+			if (currentCeremonyId != -1)
+				stateChanged = true;
 		}
+		if (await sessionStorage.ContainKeyAsync("UsersWatching"))
+		{
+			var oldCount = usersWatching.Count;
+			usersWatching = await sessionStorage.GetItemAsync<Dictionary<int,bool>>("UsersWatching");
+			if (usersWatching.Count != oldCount)
+				stateChanged = true;
+		}
+		else
+			await sessionStorage.SetItemAsync<Dictionary<int,bool>>("UsersWatching", usersWatching);
+		if (await sessionStorage.ContainKeyAsync("UsersSeenPerMovie"))
+		{
+			UsersSeenPerMovie = await sessionStorage.GetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie");
+			DataLoaded = true;
+			stateChanged = true;
+		}
+		else if (DataLoaded)
+			await sessionStorage.SetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie", UsersSeenPerMovie);
+
+		if (stateChanged)
+			StateHasChanged();
 	}
+
 	protected override async Task OnInitializedAsync()
 	{
 		if (currentCeremonyId == -1)
@@ -93,19 +150,44 @@
 		}
 		//Get the users participating the selected year:
 		UsersParticipating = await DBConnect.GetUsersParticipating(currentCeremonyId);
+		foreach (DataRow user in UsersParticipating.Rows)
+			usersWatching.Add((int)user["ID"], false);
+
 		//Get nominations
 		MovieNoms = await DBConnect.GetNumberOfNominations(currentCeremonyId);
+		if (DataLoaded)
+			return;
 		foreach (DataRow movie in MovieNoms.Rows)
 		{
-			DataTable users = await DBConnect.GetUsersSeen((int)movie["MovieId"]);
-			if (!UsersSeenPerMovie.ContainsKey((int)movie["MovieId"]))
-				UsersSeenPerMovie.Add((int)movie["MovieId"], users);
+			int movieId = (int)movie["MovieId"];
+			DataTable users = await DBConnect.GetUsersSeen(movieId);
+			if (!UsersSeenPerMovie.ContainsKey(movieId))
+			{
+				UsersSeenPerMovie.Add(movieId, new List<int>());
+				foreach (DataRow r in users.Rows)
+				{
+					int? uid = r["ID"] as int?;
+					if (uid.HasValue)
+						UsersSeenPerMovie[movieId].Add(uid.Value);
+				}
+			}
 		}
+		DataLoaded = true;
 	}
 
 	public async Task seenChanged(int movieId, int userId, bool seen)
 	{
-		// get the checkbox state
 		DBConnect.SetMovieSeenByUser(movieId, userId, seen);
+	}
+
+	public async Task availableChanged(int movieId, string text)
+	{
+		DBConnect.SetAvailable(movieId, text);
+	}
+
+	public async Task watchingChanged(int userId, bool watching)
+	{
+		usersWatching[userId] = watching;
+		await sessionStorage.SetItemAsync<Dictionary<int, bool>>("UsersWatching", usersWatching);
 	}
 }

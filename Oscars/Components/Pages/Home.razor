@@ -12,27 +12,60 @@
 @inject NavigationManager navigation
 @inject Blazored.SessionStorage.ISessionStorageService sessionStorage
 
+<table class="table-sm table-bordered m-2">
+	<thead>
+		<tr bgcolor="#333">
+			@foreach (DataRow u in UsersParticipating.Rows)
+			{
+				<th width="40" class="text-center">@u["ShortName"]</th>
+			}
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			@foreach (DataRow u in UsersParticipating.Rows)
+			{
+				if ((u["ID"] as int?).HasValue)
+				{
+					int uid = (u["ID"] as int?).Value;
+					<td align="center"><input type="checkbox" checked="@(usersWatching[uid])" @onchange="eventArgs => { watchingChanged(uid, (bool)eventArgs.Value); }" /></td>
+				}
+			}
+		</tr>
+	</tbody>
+</table>
 <div class="container-fluid">
 
-	<div class="d-flex flex-row"/>
+	<div class="d-flex flex-row" />
 
 	@foreach (DataRow catRow in Categories.Rows)
 	{
 		<div class="d-flex flex-row">
 			<table class="table-sm table-bordered m-2">
 				<thead>
-					<tr bgcolor="#eeeeee">
-						<th width="*" colspan="@(4+UsersParticipating.Rows.Count)" scope="col"><h3>@catRow["Name"]</h3></th>
+					<tr bgcolor="#333">
+						<th width="*" colspan="4" scope="col"><h3>@catRow["Name"]</h3></th>
+						<th width="90" colspan="@(UsersParticipating.Rows.Count)" class="text-center">Sett</th>
+						<th width="90" colspan="@(UsersParticipating.Rows.Count)" class="text-center">Vill ska vinna</th>
+						<th width="90" colspan="@(UsersParticipating.Rows.Count)" class="text-center">Tror kommer vinna</th>
 					</tr>
-					<tr bgcolor="#eeeeee">
+					<tr bgcolor="#333">
 						<th width="30">Together</th>
-						<th width="300">Title</th>
+						<th width="*">Title</th>
 						<th width="*">Nominee</th>
+						<th width="*">Available</th>
 						@foreach (DataRow u in UsersParticipating.Rows)
 						{
-							<th width="30" class="text-center">@u["ShortName"]</th>
+							<th width="40" scope="col">@u["ShortName"]</th>
 						}
-						<th width="*">Available</th>
+						@foreach (DataRow u in UsersParticipating.Rows)
+						{
+							<th width="40" scope="col">@u["ShortName"]</th>
+						}
+						@foreach (DataRow u in UsersParticipating.Rows)
+						{
+							<th width="40" scope="col">@u["ShortName"]</th>
+						}
 					</tr>
 				</thead>
 				<tbody>
@@ -40,24 +73,60 @@
 					@foreach (DataRow row in MoviesPerCategory[(int)catRow["ID"]].Rows)
 					{
 						int movieId = (int)row["ID"];
+						bool skip = false;
+						foreach (int userID in UsersSeenPerMovie[movieId])
+							if (usersWatching[userID])
+							{
+								skip = true;
+								break;
+							}
+						if (skip)
+							continue;
+
+						int nomId = (int)row["NomId"];
+						string availColor = ((string.IsNullOrWhiteSpace(row["URL"] as string) || (row["URL"] as string)?.ToLower() == "no") ? "#F00" : "#0F0");
 						bool together = (row["WatchTogether"] as sbyte?) == 1;
 						<tr style="background:@(row["Winner"] as sbyte? == 1 ? "#FE6" : null)">
 							<td align="center"><input type="checkbox" @onchange="eventArgs => { togetherChanged(movieId, (bool)eventArgs.Value); }" checked="@together" /></td>
 							<td>@row["Title"]</td>
 							<td>@row["Nominee"]</td>
+							<td bgcolor="@availColor"><input style="border:0;background-color:@availColor" type="text" @onchange="eventargs => availableChanged(movieId, eventargs.Value as string)" value="@row["URL"]" /></td>
 							@foreach (DataRow u in UsersParticipating.Rows)
 							{
 								bool seen = false;
 								if ((u["ID"] as int?).HasValue)
 								{
 									int uid = (u["ID"] as int?).Value;
-									foreach (DataRow u2 in UsersSeenPerMovie[movieId].Rows)
-										if (u2["ID"] as int? == u["ID"] as int?)
+									foreach (int u2 in UsersSeenPerMovie[movieId])
+										if (u2 == uid)
 											seen = true;
 									<td align="center"><input type="checkbox" checked="@(seen)" @onchange="eventArgs => { seenChanged(movieId, uid, (bool)eventArgs.Value); }" /></td>
 								}
 							}
-							<td bgcolor="@((string.IsNullOrWhiteSpace(row["URL"] as string) || (row["URL"] as string)?.ToLower()=="no") ? "#F00" : "#0F0")">@row["URL"]</td>
+							@foreach (DataRow u in UsersParticipating.Rows)
+							{
+								bool wants = false;
+								if ((u["ID"] as int?).HasValue)
+								{
+									int uid = (u["ID"] as int?).Value;
+									foreach (DataRow u2 in UsersWantPerNomination[nomId].Rows)
+										if (u2["ID"] as int? == u["ID"] as int?)
+											wants = true;
+									<td align="center"><input type="checkbox" checked="@(wants)" @onchange="eventArgs => { wantsChanged(nomId, uid, (bool)eventArgs.Value); }" /></td>
+								}
+							}
+							@foreach (DataRow u in UsersParticipating.Rows)
+							{
+								bool thinks = false;
+								if ((u["ID"] as int?).HasValue)
+								{
+									int uid = (u["ID"] as int?).Value;
+									foreach (DataRow u2 in UsersThinkPerNomination[nomId].Rows)
+										if (u2["ID"] as int? == u["ID"] as int?)
+											thinks = true;
+									<td align="center"><input type="checkbox" checked="@(thinks)" @onchange="eventArgs => { thinksChanged(nomId, uid, (bool)eventArgs.Value); }" /></td>
+								}
+							}
 						</tr>
 					}
 
@@ -73,22 +142,49 @@
 	DataTable UsersParticipating = new DataTable();
 	DataTable Categories = new DataTable();
 	Dictionary<int, DataTable> MoviesPerCategory = new Dictionary<int, DataTable>();
-	Dictionary<int, DataTable> UsersSeenPerMovie = new Dictionary<int, DataTable>();
+	Dictionary<int, List<int>> UsersSeenPerMovie = new Dictionary<int, List<int>>();
+	Dictionary<int, DataTable> UsersWantPerNomination = new Dictionary<int, DataTable>();
+	Dictionary<int, DataTable> UsersThinkPerNomination = new Dictionary<int, DataTable>();
+	Dictionary<int, bool> usersWatching = new Dictionary<int, bool>();
+	bool DataLoaded;
 	int currentCeremonyId = -1;
 	protected override async Task OnAfterRenderAsync(bool firstRender)
 	{
+		bool stateChanged = false;
+		if (await sessionStorage.ContainKeyAsync("CurrentCeremonyId"))
+		{
+			int prevCeremonyId = currentCeremonyId;
+			currentCeremonyId = await sessionStorage.GetItemAsync<int>("CurrentCeremonyId");
+			if (currentCeremonyId != prevCeremonyId)
+				stateChanged = true;
+		}
 		if (currentCeremonyId == -1)
 		{
-			if (await sessionStorage.ContainKeyAsync("CurrentCeremonyId"))
-				currentCeremonyId = await sessionStorage.GetItemAsync<int>("CurrentCeremonyId");
-			else
-			{
-				var Ceremonies = await DBConnect.GetCeremonies();
-				currentCeremonyId = (int)Ceremonies.Rows[0]["ID"];
-				await sessionStorage.SetItemAsync<int>("CurrentCeremonyId", currentCeremonyId);
-			}
-			StateHasChanged();
+			var Ceremonies = await DBConnect.GetCeremonies();
+			currentCeremonyId = (int)Ceremonies.Rows[0]["ID"];
+			await sessionStorage.SetItemAsync<int>("CurrentCeremonyId", currentCeremonyId);
+			stateChanged = true;
 		}
+		if (await sessionStorage.ContainKeyAsync("UsersWatching"))
+		{
+			int oldCount = usersWatching.Count;
+			usersWatching = await sessionStorage.GetItemAsync<Dictionary<int, bool>>("UsersWatching");
+			if (usersWatching.Count != oldCount)
+				stateChanged = true;
+		}
+		else
+			await sessionStorage.SetItemAsync<Dictionary<int, bool>>("UsersWatching", usersWatching);
+		if (await sessionStorage.ContainKeyAsync("UsersSeenPerMovie"))
+		{
+			UsersSeenPerMovie = await sessionStorage.GetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie");
+			DataLoaded = true;
+			stateChanged = true;
+		}
+		else if (DataLoaded)
+			await sessionStorage.SetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie", UsersSeenPerMovie);
+
+		if (stateChanged)
+			StateHasChanged();
 	}
 
 	protected override async Task OnInitializedAsync()
@@ -102,6 +198,9 @@
 
 		//Get the users participating the selected year:
 		UsersParticipating = await DBConnect.GetUsersParticipating(currentCeremonyId);
+		foreach (DataRow user in UsersParticipating.Rows)
+			usersWatching.Add((int)user["ID"], false);
+
 		//Get the categories for the selected year:
 		Categories = await DBConnect.GetCategories(currentCeremonyId);
 		//For each currentCategoryId:
@@ -111,11 +210,30 @@
 			//For each movie:
 			foreach (DataRow movie in MoviesPerCategory[(int)cat["ID"]].Rows)
 			{
-				DataTable users = await DBConnect.GetUsersSeen((int)movie["ID"]);
-				if (!UsersSeenPerMovie.ContainsKey((int)movie["ID"]))
-					UsersSeenPerMovie.Add((int)movie["ID"], users);
+				int movieId = (int)movie["ID"];
+				if (!DataLoaded)
+				{
+					DataTable usersSeen = await DBConnect.GetUsersSeen(movieId);
+					if (!UsersSeenPerMovie.ContainsKey(movieId))
+					{
+						UsersSeenPerMovie.Add(movieId, new List<int>());
+						foreach (DataRow r in usersSeen.Rows)
+						{
+							int? uid = r["ID"] as int?;
+							if (uid.HasValue)
+								UsersSeenPerMovie[movieId].Add(uid.Value);
+						}
+					}
+				}
+				DataTable usersWant = await DBConnect.GetUsersWant((int)movie["NomId"]);
+				if (!UsersWantPerNomination.ContainsKey((int)movie["NomId"]))
+					UsersWantPerNomination.Add((int)movie["NomId"], usersWant);
+				DataTable usersThink = await DBConnect.GetUsersThink((int)movie["NomId"]);
+				if (!UsersThinkPerNomination.ContainsKey((int)movie["NomId"]))
+					UsersThinkPerNomination.Add((int)movie["NomId"], usersThink);
 			}
 		}
+		DataLoaded = true;
 	}
 
 	protected string IDToString(int id)
@@ -136,7 +254,11 @@
 			{
 				DataTable users = await DBConnect.GetUsersSeen((int)movie["ID"]);
 				if (!UsersSeenPerMovie.ContainsKey((int)movie["ID"]))
-					UsersSeenPerMovie.Add((int)movie["ID"], users);
+				{
+					UsersSeenPerMovie.Add((int)movie["ID"], new List<int>());
+					foreach (DataRow user in users.Rows)
+						UsersSeenPerMovie[(int)movie["ID"]].Add((int)user["ID"]);
+				}
 			}
 		}
 
@@ -148,7 +270,44 @@
 		// get the checkbox state
 		DBConnect.SetMovieSeenByUser(movieId, userId, seen);
 		DataTable users = await DBConnect.GetUsersSeen(movieId);
-		UsersSeenPerMovie[movieId] = users;
+		UsersSeenPerMovie[movieId].Clear();
+		foreach (DataRow r in users.Rows)
+		{
+			int? uid = r["ID"] as int?;
+			if (uid.HasValue)
+				UsersSeenPerMovie[movieId].Add(uid.Value);
+		}
 		navigation.Refresh();
+	}
+
+	public async Task wantsChanged(int nomId, int userId, bool wants)
+	{
+		// get the checkbox state
+		DBConnect.SetUserWants(nomId, userId, wants);
+		DataTable users = await DBConnect.GetUsersWant(nomId);
+		UsersWantPerNomination[nomId] = users;
+		navigation.Refresh();
+	}
+
+	public async Task thinksChanged(int nomId, int userId, bool thinks)
+	{
+		// get the checkbox state
+		DBConnect.SetUserThinks(nomId, userId, thinks);
+		DataTable users = await DBConnect.GetUsersThink(nomId);
+		UsersThinkPerNomination[nomId] = users;
+		navigation.Refresh();
+	}
+
+	public async Task availableChanged(int movieId, string text)
+	{
+		// get the checkbox state
+		DBConnect.SetAvailable(movieId, text);
+		navigation.Refresh();
+	}
+
+	public async Task watchingChanged(int userId, bool watching)
+	{
+		usersWatching[userId] = watching;
+		await sessionStorage.SetItemAsync<Dictionary<int, bool>>("UsersWatching", usersWatching);
 	}
 }
