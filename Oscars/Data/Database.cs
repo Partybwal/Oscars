@@ -185,6 +185,26 @@ namespace Oscars.Data
 			return dt;
 		}
 
+		public async Task<DataTable> GetMovieWins(int movieId)
+		{
+			DataTable dt = new DataTable();
+			using (MySqlConnection conn = new MySqlConnection(MySQLConnectionString))
+			{
+				// Connect to the database
+				conn.Open();
+				// The MySqlCommand class represents a SQL statement to execute against a MySQL database
+				// Read rows - Limit for testing purpose to 15 records
+				MySqlCommand selectCommand = new MySqlCommand($"SELECT Winner, Categories.Name FROM Nominations INNER JOIN Categories ON Categories.ID = Nominations.CategoryID WHERE MovieID={movieId};", conn);
+				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.
+				using (var rdr = await selectCommand.ExecuteReaderAsync())
+				{
+					dt.Load(rdr);
+				}
+				conn.Close();
+			}
+			return dt;
+		}
+
 		public async Task<DataTable> GetNumberOfNominations(int ceremonyId)
 		{
 			DataTable dt = new DataTable();
@@ -195,7 +215,7 @@ namespace Oscars.Data
 				conn.Open();
 				// The MySqlCommand class represents a SQL statement to execute against a MySQL database
 				// Read rows - Limit for testing purpose to 15 records
-				MySqlCommand selectCommand = new MySqlCommand($"SELECT Count(MovieId) AS NumNominations, WatchTogether, MovieId, Title, URL, GROUP_CONCAT(DISTINCT Categories.Name ORDER BY CategoryId SEPARATOR ', ') AS Nominations FROM Nominations INNER JOIN Movies ON Movies.ID=Nominations.MovieId INNER JOIN\r\nCategories ON CategoryId=Categories.ID WHERE CeremonyId={ceremonyId} GROUP BY MovieId ORDER BY NumNominations DESC, MovieId;", conn);
+				MySqlCommand selectCommand = new MySqlCommand($"SELECT Count(MovieId) AS NumNominations, COALESCE(SuM(Winner),0) AS Wins, WatchTogether, MovieId, Title, URL FROM Nominations INNER JOIN Movies ON Movies.ID=Nominations.MovieId WHERE CeremonyId={ceremonyId} GROUP BY MovieId ORDER BY NumNominations DESC, MovieId;", conn);
 				// execute the reader To query the database. Results are usually returned in a MySqlDataReader object, created by ExecuteReader.
 				using (var rdr = await selectCommand.ExecuteReaderAsync())
 				{

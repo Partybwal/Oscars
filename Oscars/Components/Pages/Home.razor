@@ -84,9 +84,9 @@
 							continue;
 
 						int nomId = (int)row["NomId"];
-						string availColor = ((string.IsNullOrWhiteSpace(row["URL"] as string) || (row["URL"] as string)?.ToLower() == "no") ? "#F00" : "#0F0");
+						string availColor = row["Winner"] as sbyte? == 1 ? "#FE6" : ((string.IsNullOrWhiteSpace(row["URL"] as string) || (row["URL"] as string)?.ToLower() == "no") ? "#F00" : "#0F0");
 						bool together = (row["WatchTogether"] as sbyte?) == 1;
-						<tr style="background:@(row["Winner"] as sbyte? == 1 ? "#FE6" : null)">
+						<tr style="background:@(row["Winner"] as sbyte? == 1 ? "#FE6" : null); color:@(row["Winner"] as sbyte? == 1 ? "#808" : null); font-weight:@(row["Winner"] as sbyte? == 1 ? "bold" : "normal");">
 							<td align="center"><input type="checkbox" @onchange="eventArgs => { togetherChanged(movieId, (bool)eventArgs.Value); }" checked="@together" /></td>
 							<td>@row["Title"]</td>
 							<td>@row["Nominee"]</td>
@@ -138,6 +138,7 @@
 
 @code {
 
+	//TODO: No datatables here. Do everything like UsersSeen and store and restore via SessionStorage
 	DataTable Nominations = new DataTable();
 	DataTable UsersParticipating = new DataTable();
 	DataTable Categories = new DataTable();
@@ -174,15 +175,15 @@
 		}
 		else
 			await sessionStorage.SetItemAsync<Dictionary<int, bool>>("UsersWatching", usersWatching);
-		if (await sessionStorage.ContainKeyAsync("UsersSeenPerMovie"))
+/*		if (await sessionStorage.ContainKeyAsync("UsersSeenPerMovie"))
 		{
 			UsersSeenPerMovie = await sessionStorage.GetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie");
 			DataLoaded = true;
 			stateChanged = true;
 		}
-		else if (DataLoaded)
-			await sessionStorage.SetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie", UsersSeenPerMovie);
-
+//		else if (DataLoaded)
+//			await sessionStorage.SetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie", UsersSeenPerMovie);
+*/
 		if (stateChanged)
 			StateHasChanged();
 	}

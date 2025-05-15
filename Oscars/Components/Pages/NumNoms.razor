@@ -71,8 +71,25 @@
 					<tr>
 						<td><input type="checkbox" checked="@together" @onchange="eventArgs => { DBConnect.SetTogether(movieId, (bool)eventArgs.Value); }" /></td>
 						<td>@row["Title"]</td>
-						<td>@row["NumNominations"]</td>
-						<td>@row["Nominations"]</td>
+						<td>@row["NumNominations"] (@row["Wins"])</td>
+						<td>@{int i=0;
+							@foreach (DataRow nom in MovieWonNoms[movieId].Rows)
+							{
+								if (nom["Winner"] as sbyte? == 1)
+								{
+									<span style="font-weight:bold; color:palegoldenrod">@nom["Name"]</span>
+								}
+								else
+								{
+										<span>@nom["Name"]</span>
+									}
+									if (++i != MovieWonNoms[movieId].Rows.Count)
+									{
+										<span>, </span>
+									}
+								}
+							}
+						</td>
 						@foreach (DataRow u in UsersParticipating.Rows)
 						{
 							bool seen = false;
@@ -94,6 +111,7 @@
 
 @code {
 
+	Dictionary<int, DataTable> MovieWonNoms = new Dictionary<int, DataTable>();
 	DataTable MovieNoms = new DataTable();
 	DataTable UsersParticipating = new DataTable();
 	Dictionary<int, List<int>> UsersSeenPerMovie = new Dictionary<int, List<int>>();
@@ -128,15 +146,15 @@
 		}
 		else
 			await sessionStorage.SetItemAsync<Dictionary<int,bool>>("UsersWatching", usersWatching);
-		if (await sessionStorage.ContainKeyAsync("UsersSeenPerMovie"))
-		{
-			UsersSeenPerMovie = await sessionStorage.GetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie");
-			DataLoaded = true;
-			stateChanged = true;
-		}
-		else if (DataLoaded)
-			await sessionStorage.SetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie", UsersSeenPerMovie);
-
+		/*		if (await sessionStorage.ContainKeyAsync("UsersSeenPerMovie"))
+					{
+					UsersSeenPerMovie = await sessionStorage.GetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie");
+					DataLoaded = true;
+					stateChanged = true;
+				}
+				else if (DataLoaded)
+					await sessionStorage.SetItemAsync<Dictionary<int, List<int>>>("UsersSeenPerMovie", UsersSeenPerMovie);
+		*/
 		if (stateChanged)
 			StateHasChanged();
 	}
@@ -171,6 +189,9 @@
 						UsersSeenPerMovie[movieId].Add(uid.Value);
 				}
 			}
+			DataTable wins = await DBConnect.GetMovieWins(movieId);
+			if (!MovieWonNoms.ContainsKey(movieId))
+				MovieWonNoms.Add(movieId, wins);
 		}
 		DataLoaded = true;
 	}
